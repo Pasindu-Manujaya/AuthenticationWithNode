@@ -1,19 +1,67 @@
-const userModel = require('../models/user')
+const userModel = require('../models/user');
+const jwt = require('jsonwebtoken');
 
+const handleError = (err)=> {
+  const errors= {email :'', password:''};
+
+  if(err.code === 11000){
+    errors.email= 'This Email is already exists';
+    return errors;
+  }
+  if(err.message === 'incorrect Email'){
+    errors.email= 'incorrect Email';
+    return errors;
+  }
+  
+  if(err.message === 'incorrect Password'){
+    errors.password= 'incorrect Password';
+    return errors;
+  }
+
+  if(err.message.includes('user validation failed')){
+    
+    Object.values(err.errors).forEach(({properties})=>
+    {
+      errors[properties.path] = properties.message;
+    });
+    return errors;
+  }
+
+  
+}
+const MaxAge = 60*60*24*3;
+const createToken = (id) => {
+      return jwt.sign({id},'manu-sklkdnds',{
+        expiresIn:MaxAge
+      })
+};
 module.exports.signup_get = (req,res)=>{res.render('signup')};
 module.exports.signup_post =async (req,res)=>{
-                    const {username,password} =req.body;
+                    const {email,password} =req.body;
                     try{
-                      const newuser = await userModel.create({username,password});
-                      res.status(201).json(newuser);
+                      const newuser = await userModel.create({email,password});
+                      const token =createToken(newuser._id)
+                      res.cookie('jwt',token,{MaxAge:MaxAge*1000 ,httpOnly:true})
+                      res.status(201).json({user :newuser._id});
 
                     } 
                     catch(err){
-                        console.log(err);
-                         res.status(400).send('error when creating a user');
+                        const errors=handleError(err);
+                         res.status(400).json({errors});
                     }
                       
                     
                 }
 module.exports.login_get = (req,res)=>{res.render('login')};
-module.exports.login_post = (req,res)=>{res.send('user login')};
+module.exports.login_post =async (req,res)=>{
+                const {email,password} =req.body;
+                try{
+                const user =await userModel.login(email,password);
+                const token = createToken(user._id);
+                res.cookie('jwt',token,{MaxAge:MaxAge*1000 ,httpOnly:true});  
+                res.status(201).json({user:user._id});  
+                }  
+                catch(err){
+                      const errors =handleError(err);
+                      res.status(400).json({errors})
+                }};
